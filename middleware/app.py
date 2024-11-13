@@ -1,11 +1,15 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import redis
 import time
 
 app = Flask(__name__)
+CORS(app, expose_headers=["X-Ratelimit-Remaining", "X-Ratelimit-Limit", "X-Ratelimit-Retry-After"])
+
+# Connect to Redis
 redis_client = redis.Redis(host='localhost', port=6379, db=0)
 
-# Configurable rate-limiting parameters
+# Token Bucket settings
 MAX_TOKENS = 10
 REFILL_RATE = 1  # Tokens added per second
 
@@ -13,7 +17,7 @@ def rate_limit(client_id):
     current_time = int(time.time())
     key = f"rate_limit:{client_id}"
 
-    # Lua script to perform atomic rate limiting
+    # Lua script for atomic rate limiting in Redis
     lua_script = """
     local key = KEYS[1]
     local max_tokens = tonumber(ARGV[1])
@@ -35,7 +39,7 @@ def rate_limit(client_id):
         redis.call("HMSET", key, "tokens", new_tokens - 1, "last_refill", current_time)
         return new_tokens - 1
     else
-        return -1
+        return -1  -- Rate limit exceeded
     end
     """
 
